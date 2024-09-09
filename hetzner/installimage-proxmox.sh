@@ -76,11 +76,9 @@ if [ ! -f "$installimage_bin" ]; then
     exit 1
 fi
 
-#Check for base image
-installimage_file="/root/images/Debian-bullseye-latest-amd64-base.tar.gz"
-# Detect the latest installimage file to use
-#installimage_file=$(find /root/images/ -iname 'Debian-*-bullseye-amd64-base.tar.gz.tar.gz' | sort --version-sort --field-separator=- --key=2,2 -r | head -n1)
-if [ ! -f $installimage_file ] ; then
+# Check for base image
+installimage_file=$(find /root/images/ -iname 'Debian-*-bullseye-amd64-base.tar.gz' | sort --version-sort -r | head -n1)
+if [ ! -f "$installimage_file" ]; then
   echo "Error: Image file was not found: ${installimage_file}"
   echo "Please log an issue on the github repo with the following"
   ls -laFh "/root/images/"
