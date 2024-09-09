@@ -101,8 +101,8 @@ EOF
 
 echo "Add Proxmox repo to APT sources"
 cat <<EOF >> /etc/apt/sources.list.d/proxmox.list
-# PVE packages provided by proxmox.com"
-deb [arch=amd64] http://download.proxmox.com/debian/pve bullseye pve-no-subscription
+# PVE packages provided by proxmox.com
+deb [arch=amd64] http://download.proxmox.com/debian/pve bookworm pve-no-subscription
 EOF
 wget -q "https://enterprise.proxmox.com/debian/proxmox-release-bullseye.gpg" -O /etc/apt/trusted.gpg.d/proxmox-release-bullseye.gpg
 apt-get update > /dev/null

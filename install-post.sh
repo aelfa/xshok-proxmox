@@ -257,6 +257,348 @@ fi
 
 # rebuild and add non-free to /etc/apt/sources.list
 cat <<EOF > /etc/apt/sources.list
+deb https://ftp.debian.org/debian bookworm main contrib
+deb https://ftp.debian.org/debian bookworm-updates main contrib
+# non-free
+deb https://httpredir.debian.org/debian/ bookworm main contrib non-free
+# security updates
+deb https://security.debian.org/debian-security bookworm/updates main contrib
+EOF
+
+# Refresh the package lists
+apt-get update > /dev/null 2>&1
+
+# Remove conflicting utilities
+/usr/bin/env DEBIAN_FRONTEND=noninteractive apt-get -y -o Dpkg::Options::='--force-confdef' purge ntp openntpd systemd-timesyncd
+
+# Fixes for common apt repo errors
+/usr/bin/env DEBIAN_FRONTEND=noninteractive apt-get -y -o Dpkg::Options::='--force-confdef' install apt-transport-https debian-archive-keyring ca-certificates curl
+
+if [ "${XS_APTUPGRADE,,}" == "yes" ] ; then
+    # update proxmox and install various system utils
+    /usr/bin/env DEBIAN_FRONTEND=noninteractive apt-get -y -o Dpkg::Options::='--force-confdef' dist-upgrade
+    pveam update
+fi
+
+# Install packages which are sometimes missing on some Proxmox installs.
+/usr/bin/env DEBIAN_FRONTEND=noninteractive apt-get -y -o Dpkg::Options::='--force-confdef' install zfsutils-linux proxmox-backup-restore-image chrony
+
+if [ "${XS_UTILS,,}" == "yes" ] ; then
+# Install common system utilities
+    /usr/bin/env DEBIAN_FRONTEND=noninteractive apt-get -y -o Dpkg::Options::='--force-confdef' install \
+    axel \
+    build-essential \
+    curl \
+    dialog \
+    dnsutils \
+    dos2unix \
+    git \
+    gnupg-agent \
+    grc \
+    htop \
+    iftop \
+    iotop \
+    iperf \
+    ipset \
+    iptraf \
+    mlocate \
+    msr-tools \
+    nano \
+    net-tools \
+    omping \
+    software-properties-common \
+    sshpass \
+    tmux \
+    unzip \
+    vim \
+    vim-nox \
+    wget \
+    whois \
+    zip
+fi
+
+if [ "${XS_CEPH,,}" == "yes" ] ; then
+    # Add the latest ceph provided by proxmox
+    echo "deb http://download.proxmox.com/debian/ceph-pacific ${OS_CODENAME} main" > /etc/apt/sources.list.d/ceph-pacific.list
+    ## Refresh the package lists
+    apt-get update > /dev/null 2>&1
+    ## Install ceph support
+    echo "Y" | pveceph install
+fi
+
+if [ "${XS_LYNIS,,}" == "yes" ] ; then
+    # Lynis security scan tool by Cisofy
+    wget -O - https://packages.cisofy.com/keys/cisofy-software-public.key | apt-key add -
+    ## Add the latest lynis
+    echo "deb https://packages.cisofy.com/community/lynis/deb/ stable main" > /etc/apt/sources.list.d/cisofy-lynis.list
+    ## Refresh the package lists
+    apt-get update > /dev/null 2>&1
+    /usr/bin/env DEBIAN_FRONTEND=noninteractive apt-get -y -o Dpkg::Options::='--force-confdef' install lynis
+fi
+
+if [ "${XS_OPENVSWITCH,,}" == "yes" ] && [ "${XS_IFUPDOWN2}" == "no" ] ; then
+    ## Install openvswitch for a virtual internal network
+    /usr/bin/env DEBIAN_FRONTEND=noninteractive apt-get -y -o Dpkg::Options::='--force-confdef' install ifenslave ifupdown
+    /usr/bin/env DEBIAN_FRONTEND=noninteractive apt-get -y -o Dpkg::Options::='--force-confdef' remove ifupdown2
+#!/usr/bin/env bash
+################################################################################
+# This is property of eXtremeSHOK.com
+# You are free to use, modify and distribute, however you may not remove this notice.
+# Copyright (c) Adrian Jon Kriel :: admin@extremeshok.com
+################################################################################
+#
+# Script updates can be found at: https://github.com/extremeshok/xshok-proxmox
+#
+# post-installation script for Proxmox
+#
+# License: BSD (Berkeley Software Distribution)
+#
+################################################################################
+#
+# Tested on Proxmox Version: 7.1
+#
+# Assumptions: Proxmox installed
+#
+# Notes:
+# openvswitch will be disabled (removed) when ifupdown2 is enabled
+# ifupdown2 will be disabled (removed) when openvswitch is enabled
+#
+# Docker : not advisable to run docker on the Hypervisor(proxmox) directly.
+# Correct way is to create a VM which will be used exclusively for docker.
+# ie. fresh ubuntu lts server with https://github.com/extremeshok/xshok-docker
+################################################################################
+#
+#    THERE ARE NO USER CONFIGURABLE OPTIONS IN THIS SCRIPT
+#
+################################################################################
+
+#####  T O   S E T   Y O U R   O P T I O N S  ######
+# User Defined Options for (install-post.sh) post-installation script for Proxmox
+# are set in the xs-install-post.env, see the sample : xs-install-post.env.sample
+## Alternatively, set the varible via the export
+# Example to disable to motd
+# export XS_MOTD="no" ; bash install-post.sh
+###############################
+#####  D O   N O T   E D I T   B E L O W  ######
+
+#### VARIABLES / options
+# Detect AMD EPYC and Ryzen CPU and Apply Fixes
+if [ -z "$XS_AMDFIXES" ] ; then
+    XS_AMDFIXES="yes"
+fi
+# Force APT to use IPv4
+if [ -z "$XS_APTIPV4" ] ; then
+    XS_APTIPV4="yes"
+fi
+# Update proxmox and install various system utils
+if [ -z "$XS_APTUPGRADE" ] ; then
+    XS_APTUPGRADE="yes"
+fi
+# Customise bashrc
+if [ -z "$XS_BASHRC" ] ; then
+    XS_BASHRC="yes"
+fi
+# Add the latest ceph provided by proxmox
+if [ -z "$XS_CEPH" ] ; then
+    XS_CEPH="no"
+fi
+# Disable portmapper / rpcbind (security)
+if [ -z "$XS_DISABLERPC" ] ; then
+    XS_DISABLERPC="yes"
+fi
+# Ensure Entropy Pools are Populated, prevents slowdowns whilst waiting for entropy
+if [ -z "$XS_ENTROPY" ] ; then
+    XS_ENTROPY="yes"
+fi
+# Protect the web interface with fail2ban
+if [ -z "$XS_FAIL2BAN" ] ; then
+    XS_FAIL2BAN="yes"
+fi
+# Detect if is a virtual machine and install the relavant guest agent
+if [ -z "$XS_GUESTAGENT" ] ; then
+    XS_GUESTAGENT="yes"
+fi
+# Install ifupdown2 for a virtual internal network allows rebootless networking changes (not compatible with openvswitch-switch)
+if [ -z "$XS_IFUPDOWN2" ] ; then
+    XS_IFUPDOWN2="yes"
+fi
+# Limit the size and optimise journald
+if [ -z "$XS_JOURNALD" ] ; then
+    XS_JOURNALD="yes"
+fi
+# Install kernel source headers
+if [ -z "$XS_KERNELHEADERS" ] ; then
+    XS_KERNELHEADERS="yes"
+fi
+# Ensure ksmtuned (ksm-control-daemon) is enabled and optimise according to ram size
+if [ -z "$XS_KSMTUNED" ] ; then
+    XS_KSMTUNED="yes"
+fi
+# Set language, if changed will disable XS_NOAPTLANG
+if [ -z "$XS_LANG" ] ; then
+    XS_LANG="en_US.UTF-8"
+fi
+# Enable restart on kernel panic, kernel oops and hardlockup
+if [ -z "$XS_KERNELPANIC" ] ; then
+    XS_KERNELPANIC="yes"
+fi
+# Increase max user watches, FD limit, FD ulimit, max key limit, ulimits
+if [ -z "$XS_LIMITS" ] ; then
+    XS_LIMITS="yes"
+fi
+# Optimise logrotate
+if [ -z "$XS_LOGROTATE" ] ; then
+    XS_LOGROTATE="yes"
+fi
+# Lynis security scan tool by Cisofy
+if [ -z "$XS_LYNIS" ] ; then
+    XS_LYNIS="yes"
+fi
+# Increase Max FS open files
+if [ -z "$XS_MAXFS" ] ; then
+    XS_MAXFS="yes"
+fi
+# Optimise Memory
+if [ -z "$XS_MEMORYFIXES" ] ; then
+    XS_MEMORYFIXES="yes"
+fi
+# Pretty MOTD BANNER
+if [ -z "$XS_MOTD" ] ; then
+    XS_MOTD="yes"
+fi
+# Enable Network optimising
+if [ -z "$XS_NET" ] ; then
+    XS_NET="yes"
+fi
+# Save bandwidth and skip downloading additional languages, requires XS_LANG="en_US.UTF-8"
+if [ -z "$XS_NOAPTLANG" ] ; then
+    XS_NOAPTLANG="yes"
+fi
+# Disable enterprise proxmox repo
+if [ -z "$XS_NOENTREPO" ] ; then
+    XS_NOENTREPO="yes"
+fi
+# Remove subscription banner
+if [ -z "$XS_NOSUBBANNER" ] ; then
+    XS_NOSUBBANNER="yes"
+fi
+# Install openvswitch for a virtual internal network
+if [ -z "$XS_OPENVSWITCH" ] ; then
+    XS_OPENVSWITCH="no"
+fi
+# Detect if this is an OVH server and install OVH Real Time Monitoring
+if [ -z "$XS_OVHRTM" ] ; then
+    XS_OVHRTM="yes"
+fi
+# Set pigz to replace gzip, 2x faster gzip compression
+if [ -z "$XS_PIGZ" ] ; then
+    XS_PIGZ="yes"
+fi
+# Bugfix: high swap usage with low memory usage
+if [ -z "$XS_SWAPPINESS" ] ; then
+    XS_SWAPPINESS="yes"
+fi
+# Enable TCP BBR congestion control
+if [ -z "$XS_TCPBBR" ] ; then
+    XS_TCPBBR="yes"
+fi
+# Enable TCP fastopen
+if [ -z "$XS_TCPFASTOPEN" ] ; then
+    XS_TCPFASTOPEN="yes"
+fi
+# Enable testing proxmox repo
+if [ -z "$XS_TESTREPO" ] ; then
+    XS_TESTREPO="no"
+fi
+# Automatically Synchronize the time
+if [ -z "$XS_TIMESYNC" ] ; then
+    XS_TIMESYNC="yes"
+fi
+# Set Timezone, empty = set automatically by IP
+if [ -z "$XS_TIMEZONE" ] ; then
+    XS_TIMEZONE=""
+fi
+# Install common system utilities
+if [ -z "$XS_UTILS" ] ; then
+    XS_UTILS="yes"
+fi
+# Increase vzdump backup speed
+if [ -z "$XS_VZDUMP" ] ; then
+    XS_VZDUMP="yes"
+fi
+# Optimise ZFS arc size accoring to memory size
+if [ -z "$XS_ZFSARC" ] ; then
+    XS_ZFSARC="yes"
+fi
+# Install zfs-auto-snapshot
+if [ -z "$XS_ZFSAUTOSNAPSHOT" ] ; then
+    XS_ZFSAUTOSNAPSHOT="no"
+fi
+# Enable VFIO IOMMU support for PCIE passthrough
+if [ -z "$XS_VFIO_IOMMU" ] ; then
+    XS_VFIO_IOMMU="yes"
+fi
+#################  D O   N O T   E D I T  ######################################
+
+echo "Processing .... "
+
+# VARIABLES are overrideen with xs-install-post.env
+if [ -f "xs-install-post.env" ] ; then
+    echo "Loading variables from xs-install-post.env ..."
+    # shellcheck disable=SC1091
+    source xs-install-post.env;
+fi
+
+# Set the local
+if [ "$XS_LANG" == "" ] ; then
+    XS_LANG="en_US.UTF-8"
+fi
+export LANG="$XS_LANG"
+export LC_ALL="C"
+
+# enforce proxmox
+if [ ! -f "/etc/pve/.version" ] ; then
+  echo "ERROR: This script only supports Proxmox"
+  exit 1
+fi
+
+if [ -f "/etc/extremeshok" ] ; then
+  echo "ERROR: Script can only be run once"
+  exit 1
+fi
+
+# SET VARIBLES
+
+OS_CODENAME="$(grep "VERSION_CODENAME=" /etc/os-release | cut -d"=" -f 2 | xargs )"
+RAM_SIZE_GB=$(( $(vmstat -s | grep -i "total memory" | xargs | cut -d" " -f 1) / 1024 / 1000))
+
+if [ "${XS_LANG}" == "en_US.UTF-8" ] && [ "${XS_NOAPTLANG,,}" == "yes" ] ; then
+    # save bandwidth and skip downloading additional languages
+    echo -e "Acquire::Languages \"none\";\\n" > /etc/apt/apt.conf.d/99-xs-disable-translations
+fi
+
+if [ "${XS_APTIPV4,,}" == "yes" ] ; then
+    # force APT to use IPv4
+    echo -e "Acquire::ForceIPv4 \"true\";\\n" > /etc/apt/apt.conf.d/99-xs-force-ipv4
+fi
+
+if [ "${XS_NOENTREPO,,}" == "yes" ] ; then
+    # disable enterprise proxmox repo
+    if [ -f /etc/apt/sources.list.d/pve-enterprise.list ]; then
+      sed -i "s/^deb/#deb/g" /etc/apt/sources.list.d/pve-enterprise.list
+    fi
+    # enable free public proxmox repo
+    if [ ! -f /etc/apt/sources.list.d/proxmox.list ] && [ ! -f /etc/apt/sources.list.d/pve-public-repo.list ] && [ ! -f /etc/apt/sources.list.d/pve-install-repo.list ] ; then
+      echo -e "deb http://download.proxmox.com/debian/pve ${OS_CODENAME} pve-no-subscription\\n" > /etc/apt/sources.list.d/pve-public-repo.list
+    fi
+    if [ "${XS_TESTREPO,,}" == "yes" ] ; then
+        # enable testing proxmox repo
+        echo -e "deb http://download.proxmox.com/debian/pve ${OS_CODENAME} pvetest\\n" > /etc/apt/sources.list.d/pve-testing-repo.list
+    fi
+fi
+
+# rebuild and add non-free to /etc/apt/sources.list
+cat <<EOF > /etc/apt/sources.list
 deb https://ftp.debian.org/debian ${OS_CODENAME} main contrib
 deb https://ftp.debian.org/debian ${OS_CODENAME}-updates main contrib
 # non-free

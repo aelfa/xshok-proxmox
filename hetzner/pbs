@@ -27,7 +27,10 @@ fi
 echo -e "\n----- Add Proxmox repo to APT sources -----\n"
 
 echo -e "\n\n# PBS packages provided by proxmox.com" >/etc/apt/sources.list.d/proxmox.list
-echo -e "deb http://download.proxmox.com/debian/pbs bullseye pbs-no-subscription\n" >>/etc/apt/sources.list.d/proxmox.list
+cat <<EOF >> /etc/apt/sources.list.d/proxmox.list
+# PBS packages provided by proxmox.com
+deb http://download.proxmox.com/debian/pbs bookworm pbs-no-subscription
+EOF
 wget -q "http://download.proxmox.com/debian/proxmox-release-bullseye.gpg" -O /etc/apt/trusted.gpg.d/proxmox-release-bullseye.gpg
 
 
@@ -37,7 +40,7 @@ echo -e "\n----- Install Proxmox packages -----\n"
 
 cat <<EOF | debconf-set-selections
 postfix postfix/mailname           string $(cat /etc/hostname)
-postfix postfix/destinations       string $(cat /etc/hostname), proxmox, localhost.localdomain, localhost
+postfix postfix/destinations       string $(cat /etc/hostname), proxmox, localhost.localdomain, localhost.localdomain
 postfix postfix/chattr             boolean false
 postfix postfix/mailbox_limit      string 0
 postfix postfix/main_mailer_type   select Local only

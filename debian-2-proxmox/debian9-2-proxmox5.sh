@@ -96,10 +96,8 @@ EOF
 
 echo "Add Proxmox repo to APT sources"
 cat <<EOF >> /etc/apt/sources.list.d/proxmox.list
-
-# PVE packages provided by proxmox.com"
-deb http://mirror.hetzner.de/debian/pve stretch pve-no-subscription
-deb http://download.proxmox.com/debian/pve stretch pve-no-subscription
+# PVE packages provided by proxmox.com
+deb http://download.proxmox.com/debian/pve bookworm pve-no-subscription
 EOF
 wget -q "http://download.proxmox.com/debian/proxmox-ve-release-5.x.gpg" -O /etc/apt/trusted.gpg.d/proxmox-ve-release-5.x.gpg
 apt-get update > /dev/null
